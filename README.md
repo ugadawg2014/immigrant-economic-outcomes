@@ -21,10 +21,10 @@ The dashboard answers three questions across three pages:
 
 > _Add screenshot embeds here once captured._
 >
-> ![Overview](screenshots/01-overview.png)
-> ![Trajectory](screenshots/02-trajectory.png)
-> ![Trajectory](screenshots/03-trajectory.png)
-> ![Comparison](screenshots/04-comparison.png)
+> ![Overview](screenshots/01-Overview.png)
+> ![Trajectory](screenshots/02-Trajectory.png)
+> ![Trajectory](screenshots/03-Trajectory.png)
+> ![Comparison](screenshots/04-Comparison.png)
 
 ## About the data
 
@@ -76,6 +76,7 @@ treatment of ACS 2020 experimental weights. Read
 
 ## Project structure
 .
+```
 ├── pbix/ Power BI report (.pbix) — see notes on local-only files
 ├── m-code/ Power Query M scripts (one per query)
 ├── dax/ DAX measures, exported one per line
@@ -86,7 +87,7 @@ treatment of ACS 2020 experimental weights. Read
 ├── screenshots/ Dashboard screenshots
 ├── LICENSE CC0 1.0 Universal (code only — IPUMS data separately licensed)
 └── README.md
-
+```
 
 ## How to reproduce
 
