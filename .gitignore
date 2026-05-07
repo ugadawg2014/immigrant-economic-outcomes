@@ -1,0 +1,40 @@
+# Power BI
+*.pbix.bak
+.pbi-cache/
+*.pbiviz
+*.tmp
+
+# IPUMS data — licensed, cannot be redistributed
+data/ipums/
+data/raw/
+*.dat
+*.dat.gz
+*.cbk
+*.xml
+usa_*.csv
+usa_*.csv.gz
+
+# Aggregated outputs derived from IPUMS — generally OK to commit, but defaults
+# off for safety. Whitelist explicit files in /data/aggregated/ if you commit them.
+data/aggregated/*.csv
+!data/aggregated/.gitkeep
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Office temp lockfiles
+~$*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
