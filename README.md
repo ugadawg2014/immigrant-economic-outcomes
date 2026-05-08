@@ -7,7 +7,7 @@ data analysis project.
 
 ## What it shows
 
-The dashboard answers three questions across three pages:
+The dashboard answers four questions across four pages:
 
 1. **Overview** — How do foreign-born US residents compare to native-born,
    in aggregate and by country?
@@ -16,15 +16,19 @@ The dashboard answers three questions across three pages:
    country of origin?
 3. **Comparison** — Which immigrant origin groups earn most, and which
    earn least, relative to native-born comparators?
+4. **Education** — How do earnings by educational attainment differ between
+   foreign-born and native-born populations, and at which education levels
+   does the gap close?
 
 ## Dashboard preview
 
-> _Add screenshot embeds here once captured._
->
-> ![Overview](screenshots/01-Overview.png)
-> ![Trajectory](screenshots/02-Trajectory.png)
-> ![Trajectory](screenshots/03-Trajectory.png)
-> ![Comparison](screenshots/04-Comparison.png)
+> ![Overview](screenshots/01-overview.png)
+> ![Trajectory](screenshots/02-trajectory.png)
+> ![Trajectory](screenshots/03-trajectory.png)
+> ![Comparison](screenshots/04-comparison.png)
+> ![Education](screenshots/06-education.png)
+> ![Education](screenshots/07-education.png)
+> ![Data Map](screenshots/05-data-map.png)
 
 ## About the data
 
@@ -64,7 +68,8 @@ This dashboard is registered with the IPUMS Bibliography at
 ## Tech stack
 
 - **IPUMS USA** for raw microdata extracts
-- **Python** (standard library only) for survey-weighted pre-aggregation
+- **Python** for survey-weighted pre-aggregation (standard library only) and
+  for the WLS regression analysis (`pandas`, `statsmodels`, `numpy`)
 - **Power BI Desktop** with Power Query (M) and DAX for the dashboard
 
 ## Methodology
@@ -96,12 +101,42 @@ See [docs/setup.md](docs/setup.md). Summary:
 1. Register at <https://usa.ipums.org>
 2. Pull the extract per [ipums/extract-spec.md](ipums/extract-spec.md)
 3. Run `python scripts/ipums_aggregator.py` to produce the aggregated CSV
-4. Open `pbix/immigrant-outcomes.pbix` in Power BI Desktop
-5. Refresh
+4. *(Optional)* Run `python scripts/regression.py` to reproduce the country
+   fixed-effects regression (requires `pip install pandas statsmodels`)
+5. Open `pbix/immigrant-outcomes.pbix` in Power BI Desktop
+6. Refresh
 
 ## Findings
 
-See [docs/findings.md](docs/findings.md).
+The dashboard surfaces several patterns documented in
+[docs/findings.md](docs/findings.md). The headline:
+
+> Across 25 years of ACS data, foreign-born US residents in aggregate earn
+> ~95% of native-born comparators — but this aggregate hides order-of-magnitude
+> variation across origin countries. The "immigrant" label is not an
+> economically homogeneous group.
+
+To separate "education explains earnings" from "country of origin explains
+earnings even at the same education level," I fit a weighted least squares
+log-wage regression on the cell-level aggregated data, with country fixed
+effects and controls for education, age, and year (HC1 robust standard
+errors). Code: [scripts/regression.py](scripts/regression.py). Coefficients:
+[data/aggregated/country_fixed_effects.csv](data/aggregated/country_fixed_effects.csv).
+
+> A weighted regression of log-wages on education, age, year, and country
+> fixed effects (R² = 0.97) finds a 47-percentage-point spread in
+> country-of-origin wage effects after controlling for observable human
+> capital — from **+33.6%** for India to **-13.9%** for Mexico. This is a
+> conditional correlation; the country fixed effects absorb visa-pathway
+> composition, industry concentration, English proficiency, and other
+> unobservables, and should not be interpreted causally.
+
+The regression formalizes what the descriptive dashboard suggests: country of
+origin is a strong predictor of US labor-market outcomes for reasons the
+available human-capital controls do not explain, most plausibly the
+immigration-policy selection mechanism that routes different country flows
+through different visa categories. Full caveats and per-country coefficients
+in [docs/findings.md](docs/findings.md).
 
 ## Known data issues
 

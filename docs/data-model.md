@@ -4,7 +4,7 @@
 
 | Table | Source | Grain | Notes |
 |---|---|---|---|
-| `Medians` | Aggregated CSV from `scripts/ipums_aggregator.py` | One row per (cohort_kind × country × age × YRS × year) | Fact table |
+| `Medians` | Aggregated CSV from `scripts/ipums_aggregator.py` | One row per (cohort_kind × country × age × YRS × education_group × year), where `education_group="All"` rows are the rolled-up totals | Fact table |
 | `Date` | Generated in Power Query (`List.Numbers`) | One row per year, 2000–2024 | Time dim |
 | `Countries` | Static `#table` lookup | One row per BPL code | Country dim with region + tier |
 
@@ -22,6 +22,7 @@
 | `country_name` | text | Display name |
 | `age_group` | text | "25-34", "35-44", "45-54", "55-64" |
 | `years_in_us_group` | text | "0-5", "6-10", "11-20", "20+", or "n/a" for native-born |
+| `education_group` | text | "Less than HS", "High school", "Some college", "Bachelor's", "Graduate", or "All" for the rolled-up total. **Non-education visuals must filter `education_group = "All"` to avoid double-counting / averaging medians across buckets.** |
 | `year` | int | ACS sample year, 2000–2024 |
 | `n_unweighted` | int | Sample size for suppression decisions |
 | `n_weighted` | float | Sum of person weights |
@@ -41,8 +42,8 @@
 
 | Measure | Definition | Where used |
 |---|---|---|
-| `Foreign Born Median` | `AVERAGE(Medians[median_incwage_2024])` filtered to `tier <> "native"` | Overview KPIs, Comparison line/bars |
-| `Native Born Median` | Same, but `REMOVEFILTERS(Countries)` and `tier = "native"` | Overview KPIs (always-on baseline) |
+| `Foreign Born Median` | `AVERAGE(Medians[median_incwage_2024])` filtered to `tier <> "native"` AND `education_group = "All"` | Overview KPIs, Comparison line/bars |
+| `Native Born Median` | Same, but `REMOVEFILTERS(Countries)`, `tier = "native"`, and `education_group = "All"` | Overview KPIs (always-on baseline) |
 | `Earnings Ratio to Native` | `[Foreign Born Median] / [Native Born Median]` | Overview KPI |
 | `Recent Arrivals (0-5 yrs)` etc. | Same, filtered to `years_in_us_group = "0-5"` etc. | Trajectory chart and KPIs |
 | `Country vs Native Ratio` | Same as Earnings Ratio, but per-country in filter context | Comparison bar leaderboard |

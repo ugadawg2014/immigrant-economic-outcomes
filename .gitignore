@@ -18,6 +18,8 @@ usa_*.csv.gz
 # off for safety. Whitelist explicit files in /data/aggregated/ if you commit them.
 data/aggregated/*.csv
 !data/aggregated/.gitkeep
+!data/aggregated/country_fixed_effects.csv
+!data/aggregated/regression_coefficients.csv
 
 # OS artifacts
 .DS_Store

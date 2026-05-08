@@ -1,4 +1,4 @@
-"""Aggregate raw IPUMS USA extract to country/age/year medians for Power BI.
+"""Aggregate raw IPUMS USA extract to country/age/education/year medians for Power BI.
 
 Reads the raw IPUMS CSV extract, applies the methodology defined in
 docs/methodology.md (sample restrictions, weights, suppression threshold),
@@ -25,6 +25,11 @@ NOTES ON COUNTRY CONSOLIDATION:
     - Other USSR/Russia (BPL 465) covers the USSR (dissolved 1991) and
       most post-Soviet states except the Baltics (codes 460-462);
       relabeled "Former USSR / Russia".
+
+NOTES ON EDUCATION GROUPS:
+    EDUC is the IPUMS general-version educational attainment code.
+    Grouped into 5 buckets: Less than HS, High school, Some college,
+    Bachelor's, Graduate. See education_group() for code mapping.
 """
 from __future__ import annotations
 
@@ -234,6 +239,25 @@ def years_in_us_group(years: int) -> str:
     return "20+"
 
 
+def education_group(educ: int) -> str:
+    """Map IPUMS EDUC code to a 5-bucket education label.
+
+    EDUC codebook:
+      00-05 = no high school completion (less than HS)
+      06    = grade 12 / HS graduate or equivalent
+      07-09 = some college, no bachelor's
+      10    = bachelor's degree (4 years of college)
+      11    = graduate / professional degree (5+ years)
+      99    = missing
+    """
+    if educ <= 5:  return "Less than HS"
+    if educ == 6:  return "High school"
+    if educ <= 9:  return "Some college"
+    if educ == 10: return "Bachelor's"
+    if educ == 11: return "Graduate"
+    return "Unknown"
+
+
 def weighted_median(values_weights: list[tuple[float, float]]) -> float:
     """Compute the weighted median of a list of (value, weight) tuples.
 
@@ -262,7 +286,11 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
     csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
     # Cell key → list of (incwage_adj, hhincome_adj, weight) tuples.
+    # Two parallel accumulators: one keyed with education_group (per-bucket),
+    # one with education_group="All" (rolled-up, preserves the original grain
+    # so pre-education DAX measures keep working unchanged).
     cells: dict[tuple, list[tuple[float, float, float]]] = defaultdict(list)
+    cells_all_edu: dict[tuple, list[tuple[float, float, float]]] = defaultdict(list)
 
     scanned = kept = 0
     unmapped_bpls: set[int] = set()
@@ -274,7 +302,7 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
         idx = {col: i for i, col in enumerate(header)}
 
         # Required columns — fail fast if missing.
-        for required in ("YEAR", "AGE", "BPL", "EMPSTAT", "YRSUSA1", "PERWT",
+        for required in ("YEAR", "AGE", "BPL", "EMPSTAT", "YRSUSA1", "PERWT", "EDUC",
                          "INCWAGE_CPIU_2010", "HHINCOME_CPIU_2010"):
             if required not in idx:
                 raise SystemExit(f"Missing required column: {required}")
@@ -288,6 +316,7 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
                 bpl_raw = int(row[idx["BPL"]])
                 empstat = int(row[idx["EMPSTAT"]])
                 yrs = int(row[idx["YRSUSA1"]] or 0)
+                educ = int(row[idx["EDUC"]] or 0)
                 perwt = float(row[idx["PERWT"]])
                 wage_adj = float(row[idx["INCWAGE_CPIU_2010"]] or 0)
                 hh_adj = float(row[idx["HHINCOME_CPIU_2010"]] or 0)
@@ -312,6 +341,9 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
             if wage_adj <= 0:
                 continue
 
+            # Education group
+            edu_group = education_group(educ)
+
             # Cohort
             if bpl <= NATIVE_BPL_MAX:
                 cohort_kind = "native_born"
@@ -327,16 +359,24 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
                     unmapped_bpls.add(bpl)
                 yrs_group = years_in_us_group(yrs)
 
-            key = (cohort_kind, country_code, country_name, ag, yrs_group, year)
+            key = (cohort_kind, country_code, country_name, ag, yrs_group, edu_group, year)
             cells[key].append((wage_adj, hh_adj, perwt))
+            key_all = (cohort_kind, country_code, country_name, ag, yrs_group, "All", year)
+            cells_all_edu[key_all].append((wage_adj, hh_adj, perwt))
             kept += 1
 
             if scanned % 1_000_000 == 0:
                 print(f"  scanned {scanned:>11,}  kept {kept:>11,}  cells {len(cells):>6,}")
 
     # ─── Compute aggregates per cell ─────────────────────────────────────────
+    # Emit rolled-up (education_group="All") rows first so the original
+    # dashboard grain is preserved, then per-education-bucket rows for the
+    # new education visuals. Measures that don't slice by education should
+    # filter education_group="All" to avoid double-counting.
     output_rows = []
-    for (cohort_kind, country_code, country_name, ag, yrs_group, year), obs in cells.items():
+    for (cohort_kind, country_code, country_name, ag, yrs_group, edu_group, year), obs in (
+        list(cells_all_edu.items()) + list(cells.items())
+    ):
         n = len(obs)
         if n < min_n:
             continue
@@ -352,6 +392,7 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
             "country_name":         country_name,
             "age_group":            ag,
             "years_in_us_group":    yrs_group,
+            "education_group":      edu_group,
             "year":                 year,
             "n_unweighted":         n,
             "n_weighted":           round(weighted_n, 0),
@@ -363,7 +404,7 @@ def aggregate(src_path: Path, dst_path: Path, min_n: int = MIN_SAMPLE_SIZE) -> t
 
     output_rows.sort(key=lambda r: (
         r["cohort_kind"], r["country_name"], r["year"],
-        r["age_group"], r["years_in_us_group"],
+        r["age_group"], r["years_in_us_group"], r["education_group"],
     ))
 
     dst_path.parent.mkdir(parents=True, exist_ok=True)
@@ -419,7 +460,8 @@ def main() -> None:
     print(f"Filters: AGE {MIN_AGE}-{MAX_AGE}, EMPSTAT=1 (employed), INCWAGE > 0")
     print(f"Suppression threshold: n_unweighted >= {args.min_n}")
     print(f"Inflation: 2010 dollars × {CPI2010_TO_2024:.4f} → 2024 dollars")
-    print(f"BPL remapping: {len(BPL_REMAP)} codes ({BPL_REMAP})\n")
+    print(f"BPL remapping: {len(BPL_REMAP)} codes ({BPL_REMAP})")
+    print(f"Education groups: 5 buckets (Less than HS / High school / Some college / Bachelor's / Graduate)\n")
 
     scanned, kept, emitted = aggregate(args.src, args.dst, min_n=args.min_n)
 
